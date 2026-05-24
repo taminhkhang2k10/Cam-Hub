@@ -1,5 +1,5 @@
 local CamHub = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main/CamHub.lua"
+    "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main/menu.lua"
 ))()
 
 local fovCircle = Drawing.new("Circle")
