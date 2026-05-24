@@ -9,7 +9,6 @@ local Workspace        = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
-local Mouse       = LocalPlayer:GetMouse()
 
 -- ─── FOV Circle ─────────────────────────────────────────────
 local fovCircle = Drawing.new("Circle")
@@ -25,24 +24,23 @@ RunService.RenderStepped:Connect(function()
     fovCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
 end)
 
--- ─── Silent Aim ─────────────────────────────────────────────
+-- ─── Config ─────────────────────────────────────────────────
 local silentAimEnabled = false
 
+-- ─── Tìm target gần nhất (Player + NPC) ─────────────────────
 local function GetClosestTarget()
     local mousePos    = UserInputService:GetMouseLocation()
     local closest     = nil
     local closestDist = math.huge
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        local char = player.Character
-        if not char then continue end
+    -- Hàm check 1 character
+    local function CheckChar(char)
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChild("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then return end
 
         local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-        if not onScreen then continue end
+        if not onScreen then return end
 
         local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
         if dist <= fovCircle.Radius and dist < closestDist then
@@ -51,57 +49,52 @@ local function GetClosestTarget()
         end
     end
 
+    -- ✅ Check Players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if player.Character then
+            CheckChar(player.Character)
+        end
+    end
+
+    -- ✅ Check NPCs (tất cả Humanoid trong Workspace)
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Humanoid") and obj.Health > 0 then
+            local char = obj.Parent
+            -- tránh check lại player
+            local isPlayer = false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character == char then
+                    isPlayer = true
+                    break
+                end
+            end
+            if not isPlayer then
+                CheckChar(char)
+            end
+        end
+    end
+
     return closest
 end
 
--- ✅ Hook Mouse.Hit trực tiếp — Blox Fruit đọc từ đây
-local targetOverride = nil
-
--- Liên tục ghi đè Mouse.Hit về phía target
+-- ─── Lock chuột về target liên tục ──────────────────────────
 RunService.RenderStepped:Connect(function()
-    if not silentAimEnabled then
-        targetOverride = nil
-        return
-    end
+    if not silentAimEnabled then return end
 
     local target = GetClosestTarget()
-    if not target then
-        targetOverride = nil
-        return
-    end
+    if not target then return end
 
-    targetOverride = target
+    -- Project vị trí target ra màn hình
+    local screenPos, onScreen = Camera:WorldToViewportPoint(target.Position)
+    if not onScreen then return end
 
-    -- Override Mouse.Hit và Mouse.Target
-    local fakeCF = CFrame.new(target.Position)
-    pcall(function()
-        -- Ghi đè hit position
-        local mt = getrawmetatable(Mouse)
-        local old = mt.__index
-        setreadonly(mt, false)
-        mt.__index = function(self, key)
-            if key == "Hit" then
-                return fakeCF
-            elseif key == "Target" then
-                return target.Parent and target.Parent:FindFirstChild("HumanoidRootPart") or target
-            end
-            return old(self, key)
-        end
-        setreadonly(mt, true)
-    end)
+    -- ✅ Di chuyển con trỏ chuột về phía target
+    mousemoverel(
+        screenPos.X - UserInputService:GetMouseLocation().X,
+        screenPos.Y - UserInputService:GetMouseLocation().Y
+    )
 end)
-
--- Khi tắt silent aim thì restore lại Mouse bình thường
-local function RestoreMouse()
-    pcall(function()
-        local mt = getrawmetatable(Mouse)
-        setreadonly(mt, false)
-        mt.__index = function(self, key)
-            return rawget(self, key)
-        end
-        setreadonly(mt, true)
-    end)
-end
 
 -- ─── Menu ────────────────────────────────────────────────────
 local Win = CamHub.CreateWindow({
@@ -128,7 +121,6 @@ AimbotTab:AddSection("Silent Aim")
 
 AimbotTab:AddToggle("Silent Aim", false, function(v)
     silentAimEnabled = v
-    if not v then
-        RestoreMouse()
-    end
 end)
+
+AimbotTab:AddLabel("Bật Silent Aim → chuột tự hút vào target trong FOV")
