@@ -11,10 +11,40 @@ local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
 
 -- ─── Config ─────────────────────────────────────────────────
-local aimbotEnabled = false   -- bật/tắt tổng
-local aimbotActive  = false   -- toggle khi bấm key
-local aimbotKey     = Enum.KeyCode.Q
-local bindingKey    = false   -- đang chờ config key không
+local aimbotEnabled = false
+local aimbotActive  = false
+local aimbotKey     = Enum.KeyCode.Y
+local bindingKey    = false
+local SMOOTH        = 0.15  -- độ mượt (nhỏ = mượt hơn)
+
+-- ─── Cache NPC mỗi 2 giây để không lag ──────────────────────
+local npcCache = {}
+local lastCache = 0
+
+local function UpdateNPCCache()
+    npcCache = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("Humanoid") then
+            local char = v.Parent
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- kiểm tra không phải player
+                local isPlayer = Players:GetPlayerFromCharacter(char)
+                if not isPlayer then
+                    table.insert(npcCache, hrp)
+                end
+            end
+        end
+    end
+end
+
+-- Update cache mỗi 2 giây
+task.spawn(function()
+    while true do
+        UpdateNPCCache()
+        task.wait(2)
+    end
+end)
 
 -- ─── Tìm target gần chuột nhất ──────────────────────────────
 local function GetTarget()
@@ -22,11 +52,10 @@ local function GetTarget()
     local closest     = nil
     local closestDist = math.huge
 
-    local function Check(char)
-        if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then return end
+    local function Check(hrp)
+        if not hrp or not hrp.Parent then return end
+        local hum = hrp.Parent:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return end
         local screen, visible = Camera:WorldToViewportPoint(hrp.Position)
         if not visible then return end
         local dist = (Vector2.new(screen.X, screen.Y) - mousePos).Magnitude
@@ -38,48 +67,45 @@ local function GetTarget()
 
     -- Players
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then Check(p.Character) end
+        if p ~= LocalPlayer and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then Check(hrp) end
+        end
     end
 
-    -- NPCs
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("Humanoid") and v.Health > 0 then
-            local isPlayer = false
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character == v.Parent then isPlayer = true break end
-            end
-            if not isPlayer then Check(v.Parent) end
-        end
+    -- NPCs từ cache
+    for _, hrp in ipairs(npcCache) do
+        Check(hrp)
     end
 
     return closest
 end
 
--- ─── Aimbot loop (chỉ chạy khi cần) ────────────────────────
-local lastRun = 0
+-- ─── Aimbot — dùng Camera lock (hoạt động mọi executor) ─────
+-- Cách này: lock camera nhìn về target → Blox Fruit tính
+-- hướng chiêu dựa vào camera → chiêu tự trúng target
+local currentTarget = nil
+
 RunService.RenderStepped:Connect(function()
-    if not aimbotEnabled or not aimbotActive then return end
+    if not aimbotEnabled or not aimbotActive then
+        currentTarget = nil
+        return
+    end
 
-    -- Giới hạn 30fps để không lag
-    local now = tick()
-    if now - lastRun < 1/30 then return end
-    lastRun = now
+    -- Cập nhật target mỗi 3 frame để nhẹ hơn
+    currentTarget = GetTarget()
+    if not currentTarget then return end
 
-    local target = GetTarget()
-    if not target then return end
-
-    local screen, visible = Camera:WorldToViewportPoint(target.Position)
-    if not visible then return end
-
-    local mouse = UserInputService:GetMouseLocation()
-    local dx = screen.X - mouse.X
-    local dy = screen.Y - mouse.Y
-
-    -- Smooth: chỉ di 30% mỗi frame để không giật
-    mousemoverel(dx * 0.3, dy * 0.3)
+    -- Lock camera smooth về phía target
+    local camPos = Camera.CFrame.Position
+    local goal   = CFrame.lookAt(camPos, currentTarget.Position)
+    Camera.CFrame = Camera.CFrame:Lerp(goal, SMOOTH)
 end)
 
--- ─── Key bấm bật/tắt aimbot ─────────────────────────────────
+-- ─── Keybind toggle ─────────────────────────────────────────
+local keyLabel    = nil
+local statusLabel = nil
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
 
@@ -88,19 +114,20 @@ UserInputService.InputBegan:Connect(function(input, gp)
         if input.UserInputType == Enum.UserInputType.Keyboard then
             aimbotKey  = input.KeyCode
             bindingKey = false
-            -- cập nhật label key
-            if _G.KeyLabel then
-                _G.KeyLabel.Text = "Phím: " .. input.KeyCode.Name
+            if keyLabel then
+                keyLabel.Text = "Phím kích hoạt: [" .. input.KeyCode.Name .. "]"
             end
         end
         return
     end
 
-    -- Bấm key toggle aimbot
+    -- Toggle aimbot bằng key
     if input.KeyCode == aimbotKey and aimbotEnabled then
         aimbotActive = not aimbotActive
-        if _G.StatusLabel then
-            _G.StatusLabel.Text = aimbotActive and "Aimbot: BẬT 🟢" or "Aimbot: TẮT 🔴"
+        if statusLabel then
+            statusLabel.Text = aimbotActive
+                and "Trạng thái: BẬT 🟢"
+                or  "Trạng thái: TẮT 🔴"
         end
     end
 end)
@@ -114,52 +141,53 @@ local AimbotTab = Win:AddTab("Aimbot")
 
 AimbotTab:AddSection("Aimbot")
 
--- Toggle bật/tắt tổng
 AimbotTab:AddToggle("Bật Aimbot", false, function(v)
     aimbotEnabled = v
     if not v then
         aimbotActive = false
-        if _G.StatusLabel then
-            _G.StatusLabel.Text = "Aimbot: TẮT 🔴"
+        if statusLabel then
+            statusLabel.Text = "Trạng thái: TẮT 🔴"
         end
     end
 end)
 
--- Label trạng thái
-_G.StatusLabel = nil
-AimbotTab:AddLabel("Aimbot: TẮT 🔴")
-
--- Lưu ref label (hack nhỏ để update text)
-task.defer(function()
-    local page = AimbotTab.Page
-    for _, v in ipairs(page:GetChildren()) do
-        if v:IsA("TextLabel") and v.Text == "Aimbot: TẮT 🔴" then
-            _G.StatusLabel = v
-            break
+-- Status label
+do
+    local ref = AimbotTab:AddLabel("Trạng thái: TẮT 🔴")
+    task.defer(function()
+        -- tìm TextLabel trong page
+        for _, v in ipairs(AimbotTab.Page:GetDescendants()) do
+            if v:IsA("TextLabel") and v.Text == "Trạng thái: TẮT 🔴" then
+                statusLabel = v
+                break
+            end
         end
-    end
-end)
+    end)
+end
 
--- Label phím hiện tại
-_G.KeyLabel = nil
-AimbotTab:AddLabel("Phím: " .. aimbotKey.Name)
-
-task.defer(function()
-    local page = AimbotTab.Page
-    for _, v in ipairs(page:GetChildren()) do
-        if v:IsA("TextLabel") and v.Text:find("Phím:") then
-            _G.KeyLabel = v
-            break
+-- Key label
+do
+    AimbotTab:AddLabel("Phím kích hoạt: [" .. aimbotKey.Name .. "]")
+    task.defer(function()
+        for _, v in ipairs(AimbotTab.Page:GetDescendants()) do
+            if v:IsA("TextLabel") and v.Text:find("Phím kích hoạt") then
+                keyLabel = v
+                break
+            end
         end
-    end
-end)
+    end)
+end
 
--- Nút config key
-AimbotTab:AddButton("Config Phím Kích Hoạt", function()
+-- Nút config phím
+AimbotTab:AddButton("⚙ Config Phím Kích Hoạt", function()
     bindingKey = true
-    if _G.KeyLabel then
-        _G.KeyLabel.Text = "Phím: Bấm phím bất kỳ..."
+    if keyLabel then
+        keyLabel.Text = "Phím kích hoạt: [Bấm phím bất kỳ...]"
     end
 end)
 
-AimbotTab:AddLabel("Bật Aimbot → bấm phím để toggle")
+AimbotTab:AddSlider("Độ mượt", 1, 10, 2, function(v)
+    SMOOTH = v / 10
+end)
+
+AimbotTab:AddLabel("Bật Aimbot → bấm phím để kích hoạt/tắt")
