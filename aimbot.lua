@@ -9,6 +9,7 @@ local Workspace        = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
+local Mouse       = LocalPlayer:GetMouse()
 
 -- ─── FOV Circle ─────────────────────────────────────────────
 local fovCircle = Drawing.new("Circle")
@@ -19,7 +20,6 @@ fovCircle.Thickness = 1.5
 fovCircle.Radius    = 120
 fovCircle.NumSides  = 64
 
--- ✅ Fix lệch: dùng UserInputService thay Mouse
 RunService.RenderStepped:Connect(function()
     local mousePos = UserInputService:GetMouseLocation()
     fovCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
@@ -54,39 +54,54 @@ local function GetClosestTarget()
     return closest
 end
 
--- ✅ Hook đúng cách cho Blox Fruit
--- Blox Fruit dùng Mouse.Hit để tính hướng chiêu
--- Ta override bằng cách redirect Camera CFrame liên tục khi giữ click
-local aiming = false
+-- ✅ Hook Mouse.Hit trực tiếp — Blox Fruit đọc từ đây
+local targetOverride = nil
 
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if not silentAimEnabled then return end
-    if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+-- Liên tục ghi đè Mouse.Hit về phía target
+RunService.RenderStepped:Connect(function()
+    if not silentAimEnabled then
+        targetOverride = nil
+        return
+    end
 
     local target = GetClosestTarget()
-    if not target then return end
+    if not target then
+        targetOverride = nil
+        return
+    end
 
-    aiming = true
+    targetOverride = target
 
-    -- Redirect camera liên tục trong khi bấm
-    local conn
-    conn = RunService.RenderStepped:Connect(function()
-        if not aiming then
-            conn:Disconnect()
-            return
+    -- Override Mouse.Hit và Mouse.Target
+    local fakeCF = CFrame.new(target.Position)
+    pcall(function()
+        -- Ghi đè hit position
+        local mt = getrawmetatable(Mouse)
+        local old = mt.__index
+        setreadonly(mt, false)
+        mt.__index = function(self, key)
+            if key == "Hit" then
+                return fakeCF
+            elseif key == "Target" then
+                return target.Parent and target.Parent:FindFirstChild("HumanoidRootPart") or target
+            end
+            return old(self, key)
         end
-        local targetPos = target.Position
-        local camPos    = Camera.CFrame.Position
-        Camera.CFrame   = CFrame.lookAt(camPos, targetPos)
+        setreadonly(mt, true)
     end)
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        aiming = false
-    end
-end)
+-- Khi tắt silent aim thì restore lại Mouse bình thường
+local function RestoreMouse()
+    pcall(function()
+        local mt = getrawmetatable(Mouse)
+        setreadonly(mt, false)
+        mt.__index = function(self, key)
+            return rawget(self, key)
+        end
+        setreadonly(mt, true)
+    end)
+end
 
 -- ─── Menu ────────────────────────────────────────────────────
 local Win = CamHub.CreateWindow({
@@ -113,4 +128,7 @@ AimbotTab:AddSection("Silent Aim")
 
 AimbotTab:AddToggle("Silent Aim", false, function(v)
     silentAimEnabled = v
+    if not v then
+        RestoreMouse()
+    end
 end)
