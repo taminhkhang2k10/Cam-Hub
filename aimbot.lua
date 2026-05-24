@@ -2,6 +2,12 @@ local CamHub = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main/menu.lua"
 ))()
 
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Visible   = false
 fovCircle.Filled    = false
@@ -9,6 +15,11 @@ fovCircle.Color     = Color3.fromRGB(255, 145, 35)
 fovCircle.Thickness = 1.5
 fovCircle.Radius    = 120
 fovCircle.NumSides  = 64
+
+-- ✅ Cập nhật vị trí theo chuột liên tục
+RunService.RenderStepped:Connect(function()
+    fovCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
+end)
 
 local silentAimEnabled = false
 
