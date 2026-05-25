@@ -14,26 +14,22 @@ local Camera      = Workspace.CurrentCamera
 --  CONFIG
 -- ═══════════════════════════════════════════════
 local Config = {
-    -- Toggle tổng
     ESPEnabled     = false,
-
-    -- Từng loại
     BoxEnabled     = true,
     NameEnabled    = true,
     HealthEnabled  = true,
     DistEnabled    = true,
     TracerEnabled  = true,
 
-    -- Màu
-    PlayerColor    = Color3.fromRGB(255, 145, 35),   -- cam
-    NPCColor       = Color3.fromRGB(255, 60,  60),   -- đỏ
+    PlayerColor    = Color3.fromRGB(255, 145, 35),
+    NPCColor       = Color3.fromRGB(255, 60,  60),
     TracerColor    = Color3.fromRGB(255, 145, 35),
     HealthColor    = Color3.fromRGB(80,  220, 80),
     TextColor      = Color3.fromRGB(255, 255, 255),
 
-    -- Misc
-    MaxDist        = 1000,   -- chỉ hiện trong tầm này (studs)
+    MaxDist        = 1000,
     BoxThickness   = 1.5,
+    BoxScale       = 1.0,   -- ✅ kích thước box
     TracerThickness= 1,
 }
 
@@ -51,71 +47,47 @@ end
 
 local function NewText(color, size)
     local t = Drawing.new("Text")
-    t.Visible  = false
-    t.Color    = color or Color3.new(1,1,1)
-    t.Size     = size  or 13
-    t.Font     = Drawing.Fonts.UI
-    t.Outline  = true
+    t.Visible      = false
+    t.Color        = color or Color3.new(1,1,1)
+    t.Size         = size  or 13
+    t.Font         = Drawing.Fonts.UI
+    t.Outline      = true
     t.OutlineColor = Color3.new(0,0,0)
-    t.ZIndex   = 6
+    t.ZIndex       = 6
     return t
 end
 
-local function NewQuad(color, thick)
-    local q = Drawing.new("Quad")
-    q.Visible   = false
-    q.Filled    = false
-    q.Color     = color or Color3.new(1,1,1)
-    q.Thickness = thick or 1.5
-    q.ZIndex    = 5
-    return q
-end
-
 -- ═══════════════════════════════════════════════
---  ESP OBJECT (1 object = 1 character)
+--  ESP OBJECT
 -- ═══════════════════════════════════════════════
 local function CreateESP(color)
     return {
-        -- Box (4 đường)
-        BoxTop    = NewLine(color, Config.BoxThickness),
-        BoxBot    = NewLine(color, Config.BoxThickness),
-        BoxLeft   = NewLine(color, Config.BoxThickness),
-        BoxRight  = NewLine(color, Config.BoxThickness),
-
-        -- Name
-        Name      = NewText(Config.TextColor, 13),
-
-        -- Distance
-        Dist      = NewText(Config.TextColor, 11),
-
-        -- Health bar (2 đường: nền + fill)
-        HPBg      = NewLine(Color3.new(0,0,0), 4),
-        HPFill    = NewLine(Config.HealthColor, 3),
-
-        -- Tracer
-        Tracer    = NewLine(Config.TracerColor, Config.TracerThickness),
+        BoxTop   = NewLine(color, Config.BoxThickness),
+        BoxBot   = NewLine(color, Config.BoxThickness),
+        BoxLeft  = NewLine(color, Config.BoxThickness),
+        BoxRight = NewLine(color, Config.BoxThickness),
+        Name     = NewText(Config.TextColor, 13),
+        Dist     = NewText(Config.TextColor, 11),
+        HPBg     = NewLine(Color3.new(0,0,0), 4),
+        HPFill   = NewLine(Config.HealthColor, 3),
+        Tracer   = NewLine(Config.TracerColor, Config.TracerThickness),
     }
 end
 
 local function RemoveESP(esp)
-    for _, v in pairs(esp) do
-        pcall(function() v:Remove() end)
-    end
+    for _, v in pairs(esp) do pcall(function() v:Remove() end) end
 end
 
 local function HideESP(esp)
-    for _, v in pairs(esp) do
-        v.Visible = false
-    end
+    for _, v in pairs(esp) do v.Visible = false end
 end
 
 -- ═══════════════════════════════════════════════
---  CACHE
+--  CACHE NPC
 -- ═══════════════════════════════════════════════
-local espObjects = {}   -- [character] = esp
-local npcList    = {}   -- list HRP của NPC
+local espObjects = {}
+local npcList    = {}
 
--- Cập nhật NPC cache mỗi 3 giây
 task.spawn(function()
     while true do
         local newList = {}
@@ -124,9 +96,7 @@ task.spawn(function()
                 local char = v.Parent
                 if char and not Players:GetPlayerFromCharacter(char) then
                     local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        table.insert(newList, char)
-                    end
+                    if hrp then table.insert(newList, char) end
                 end
             end
         end
@@ -136,143 +106,121 @@ task.spawn(function()
 end)
 
 -- ═══════════════════════════════════════════════
---  GET BOUNDING BOX 2D từ character
+--  GET BOUNDING BOX 2D
 -- ═══════════════════════════════════════════════
 local function GetBounds(char)
-    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
 
-    -- Tính top/bot từ Head và HRP
-    local head = char:FindFirstChild("Head")
-    local topPart = head or hrp
-    local topPos  = topPart.Position + Vector3.new(0, topPart.Size.Y/2 + 0.2, 0)
-    local botPos  = hrp.Position    - Vector3.new(0, 3, 0)
+    local head   = char:FindFirstChild("Head")
+    local topPos = (head or hrp).Position + Vector3.new(0, (head or hrp).Size.Y/2 + 0.2, 0)
+    local botPos = hrp.Position - Vector3.new(0, 3, 0)
 
     local topScreen, topVis = Camera:WorldToViewportPoint(topPos)
     local botScreen, botVis = Camera:WorldToViewportPoint(botPos)
-
     if not topVis and not botVis then return nil end
 
-    local topY = topScreen.Y
-    local botY = botScreen.Y
-    local midX = (topScreen.X + botScreen.X) / 2
+    local topY  = topScreen.Y
+    local botY  = botScreen.Y
+    local midX  = (topScreen.X + botScreen.X) / 2
+    local height= botY - topY
 
-    local height = botY - topY
-    local width  = math.abs(height) * 0.5   -- proporsi box
+    -- ✅ BoxScale áp dụng vào width VÀ height
+    local width  = math.abs(height) * 0.5 * Config.BoxScale
+    local hScaled= height * Config.BoxScale
+    local centerY= (topY + botY) / 2
+
+    local newTop = centerY - hScaled / 2
+    local newBot = centerY + hScaled / 2
 
     return {
-        topY  = topY,
-        botY  = botY,
-        midX  = midX,
-        height= height,
-        width = width,
-        -- corners
-        tl = Vector2.new(midX - width/2, topY),
-        tr = Vector2.new(midX + width/2, topY),
-        bl = Vector2.new(midX - width/2, botY),
-        br = Vector2.new(midX + width/2, botY),
-        -- center screen
-        center = Vector2.new(midX, (topY+botY)/2),
-        -- depth
+        topY   = newTop,
+        botY   = newBot,
+        midX   = midX,
+        height = hScaled,
+        width  = width,
+        tl     = Vector2.new(midX - width/2, newTop),
+        tr     = Vector2.new(midX + width/2, newTop),
+        bl     = Vector2.new(midX - width/2, newBot),
+        br     = Vector2.new(midX + width/2, newBot),
+        center = Vector2.new(midX, centerY),
         depth  = topScreen.Z,
     }
 end
 
 -- ═══════════════════════════════════════════════
---  UPDATE 1 ESP OBJECT
+--  UPDATE ESP
 -- ═══════════════════════════════════════════════
 local function UpdateESP(esp, char, color, label)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then HideESP(esp); return end
 
-    if not hrp or not hum then
-        HideESP(esp)
-        return
-    end
-
-    -- Khoảng cách
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     local dist  = myHRP and math.floor((hrp.Position - myHRP.Position).Magnitude) or 0
+    if dist > Config.MaxDist then HideESP(esp); return end
 
-    if dist > Config.MaxDist then
-        HideESP(esp)
-        return
-    end
+    local b = GetBounds(char)
+    if not b then HideESP(esp); return end
 
-    local bounds = GetBounds(char)
-    if not bounds then
-        HideESP(esp)
-        return
-    end
-
-    local tl, tr, bl, br = bounds.tl, bounds.tr, bounds.bl, bounds.br
-    local midX = bounds.midX
-
-    -- ── Box ────────────────────────────────────
+    -- Box
     local showBox = Config.ESPEnabled and Config.BoxEnabled
-    esp.BoxTop.Visible  = showBox
-    esp.BoxBot.Visible  = showBox
-    esp.BoxLeft.Visible = showBox
-    esp.BoxRight.Visible= showBox
+    esp.BoxTop.Visible   = showBox
+    esp.BoxBot.Visible   = showBox
+    esp.BoxLeft.Visible  = showBox
+    esp.BoxRight.Visible = showBox
     if showBox then
-        esp.BoxTop.From   = tl; esp.BoxTop.To   = tr; esp.BoxTop.Color   = color
-        esp.BoxBot.From   = bl; esp.BoxBot.To   = br; esp.BoxBot.Color   = color
-        esp.BoxLeft.From  = tl; esp.BoxLeft.To  = bl; esp.BoxLeft.Color  = color
-        esp.BoxRight.From = tr; esp.BoxRight.To = br; esp.BoxRight.Color = color
+        esp.BoxTop.From    = b.tl; esp.BoxTop.To    = b.tr; esp.BoxTop.Color    = color
+        esp.BoxBot.From    = b.bl; esp.BoxBot.To    = b.br; esp.BoxBot.Color    = color
+        esp.BoxLeft.From   = b.tl; esp.BoxLeft.To   = b.bl; esp.BoxLeft.Color   = color
+        esp.BoxRight.From  = b.tr; esp.BoxRight.To  = b.br; esp.BoxRight.Color  = color
     end
 
-    -- ── Name ───────────────────────────────────
+    -- Name
     local showName = Config.ESPEnabled and Config.NameEnabled
     esp.Name.Visible = showName
     if showName then
         esp.Name.Text     = label
         esp.Name.Color    = color
-        esp.Name.Position = Vector2.new(midX, tl.Y - 16)
+        esp.Name.Position = Vector2.new(b.midX, b.topY - 16)
         esp.Name.Center   = true
     end
 
-    -- ── Distance ───────────────────────────────
+    -- Distance
     local showDist = Config.ESPEnabled and Config.DistEnabled
     esp.Dist.Visible = showDist
     if showDist then
-        esp.Dist.Text     = dist .. "m"
+        esp.Dist.Text     = "[" .. dist .. "m]"
         esp.Dist.Color    = Config.TextColor
-        esp.Dist.Position = Vector2.new(midX, bl.Y + 2)
+        esp.Dist.Position = Vector2.new(b.midX, b.botY + 2)
         esp.Dist.Center   = true
-        esp.Dist.Size     = math.clamp(11 - dist/100, 8, 11)
+        esp.Dist.Size     = math.clamp(11 - dist/150, 7, 11)
     end
 
-    -- ── Health Bar (kên trái box) ───────────────
+    -- Health Bar
     local showHP = Config.ESPEnabled and Config.HealthEnabled
     esp.HPBg.Visible   = showHP
     esp.HPFill.Visible = showHP
     if showHP then
         local hpRatio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-        local barH    = bounds.botY - bounds.topY
-        local barX    = tl.X - 5
-
-        esp.HPBg.From  = Vector2.new(barX, bounds.topY)
-        esp.HPBg.To    = Vector2.new(barX, bounds.botY)
-        esp.HPBg.Color = Color3.new(0,0,0)
-
-        local fillBot = bounds.botY
-        local fillTop = bounds.botY - barH * hpRatio
-        esp.HPFill.From  = Vector2.new(barX, fillTop)
-        esp.HPFill.To    = Vector2.new(barX, fillBot)
-
-        -- Warna HP: hijau → kuning → merah
-        local r = math.clamp(2 * (1-hpRatio), 0, 1)
-        local g = math.clamp(2 * hpRatio,     0, 1)
+        local barX    = b.tl.X - 5
+        esp.HPBg.From  = Vector2.new(barX, b.topY)
+        esp.HPBg.To    = Vector2.new(barX, b.botY)
+        esp.HPBg.Color = Color3.new(0, 0, 0)
+        esp.HPFill.From  = Vector2.new(barX, b.botY - b.height * hpRatio)
+        esp.HPFill.To    = Vector2.new(barX, b.botY)
+        local r = math.clamp(2*(1-hpRatio), 0, 1)
+        local g = math.clamp(2*hpRatio,     0, 1)
         esp.HPFill.Color = Color3.new(r, g, 0)
     end
 
-    -- ── Tracer (từ giữa màn hình xuống target) ──
+    -- Tracer
     local showTracer = Config.ESPEnabled and Config.TracerEnabled
     esp.Tracer.Visible = showTracer
     if showTracer then
         local vp = Camera.ViewportSize
         esp.Tracer.From  = Vector2.new(vp.X/2, vp.Y)
-        esp.Tracer.To    = Vector2.new(midX, bounds.botY)
+        esp.Tracer.To    = Vector2.new(b.midX, b.botY)
         esp.Tracer.Color = Config.TracerColor
     end
 end
@@ -288,35 +236,22 @@ RunService.RenderStepped:Connect(function()
 
     local seen = {}
 
-    -- ── Players ──────────────────────────────
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         local char = player.Character
         if not char then continue end
-
         seen[char] = true
-
-        if not espObjects[char] then
-            espObjects[char] = CreateESP(Config.PlayerColor)
-        end
-
+        if not espObjects[char] then espObjects[char] = CreateESP(Config.PlayerColor) end
         UpdateESP(espObjects[char], char, Config.PlayerColor, player.DisplayName)
     end
 
-    -- ── NPCs ─────────────────────────────────
     for _, char in ipairs(npcList) do
         if not char or not char.Parent then continue end
         seen[char] = true
-
-        if not espObjects[char] then
-            espObjects[char] = CreateESP(Config.NPCColor)
-        end
-
-        local name = char.Name
-        UpdateESP(espObjects[char], char, Config.NPCColor, name)
+        if not espObjects[char] then espObjects[char] = CreateESP(Config.NPCColor) end
+        UpdateESP(espObjects[char], char, Config.NPCColor, char.Name)
     end
 
-    -- ── Cleanup character yang sudah pergi ───
     for char, esp in pairs(espObjects) do
         if not seen[char] then
             RemoveESP(esp)
@@ -334,17 +269,13 @@ local Win = CamHub.CreateWindow({
 
 local VisualTab = Win:AddTab("Visual")
 
--- ── Tổng ─────────────────────────────────────
 VisualTab:AddSection("ESP Settings")
 
 VisualTab:AddToggle("Bật ESP", false, function(v)
     Config.ESPEnabled = v
-    if not v then
-        for _, esp in pairs(espObjects) do HideESP(esp) end
-    end
+    if not v then for _, esp in pairs(espObjects) do HideESP(esp) end end
 end)
 
--- ── Từng loại ────────────────────────────────
 VisualTab:AddSection("Loại ESP")
 
 VisualTab:AddToggle("Box", true, function(v)
@@ -367,7 +298,6 @@ VisualTab:AddToggle("Tracer", true, function(v)
     Config.TracerEnabled = v
 end)
 
--- ── Màu ──────────────────────────────────────
 VisualTab:AddSection("Màu sắc")
 
 VisualTab:AddColorPicker("Màu Player", Config.PlayerColor, function(c)
@@ -380,12 +310,9 @@ end)
 
 VisualTab:AddColorPicker("Màu Tracer", Config.TracerColor, function(c)
     Config.TracerColor = c
-    for _, esp in pairs(espObjects) do
-        esp.Tracer.Color = c
-    end
+    for _, esp in pairs(espObjects) do esp.Tracer.Color = c end
 end)
 
--- ── Misc ─────────────────────────────────────
 VisualTab:AddSection("Cài đặt khác")
 
 VisualTab:AddSlider("Tầm nhìn tối đa (m)", 100, 2000, 1000, function(v)
@@ -395,9 +322,14 @@ end)
 VisualTab:AddSlider("Độ dày Box", 1, 5, 2, function(v)
     Config.BoxThickness = v
     for _, esp in pairs(espObjects) do
-        esp.BoxTop.Thickness    = v
-        esp.BoxBot.Thickness    = v
-        esp.BoxLeft.Thickness   = v
-        esp.BoxRight.Thickness  = v
+        esp.BoxTop.Thickness   = v
+        esp.BoxBot.Thickness   = v
+        esp.BoxLeft.Thickness  = v
+        esp.BoxRight.Thickness = v
     end
+end)
+
+-- ✅ Slider kích thước box
+VisualTab:AddSlider("Kích thước Box", 50, 200, 100, function(v)
+    Config.BoxScale = v / 100
 end)
