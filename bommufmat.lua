@@ -2,10 +2,9 @@ local CamHub = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main/menu.lua"
 ))()
 
-local RunService       = game:GetService("RunService")
-local Players          = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local Workspace        = game:GetService("Workspace")
+local RunService  = game:GetService("RunService")
+local Players     = game:GetService("Players")
+local Workspace   = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
@@ -15,6 +14,11 @@ local Camera      = Workspace.CurrentCamera
 -- ═══════════════════════════════════════════════
 local Config = {
     ESPEnabled     = false,
+
+    -- ✅ Bật/tắt từng loại target
+    PlayerESP      = true,
+    NPCESP         = true,
+
     BoxEnabled     = true,
     NameEnabled    = true,
     HealthEnabled  = true,
@@ -29,7 +33,7 @@ local Config = {
     MaxDist        = 1000,
     BoxThickness   = 1.5,
     BoxScale       = 1.0,
-    BoxFillOpacity = 0,      -- 0 = không tô, 1 = tô hoàn toàn
+    BoxFillOpacity = 0,
     TracerThickness= 1,
 }
 
@@ -62,8 +66,8 @@ local function NewQuad(color)
     q.Visible      = false
     q.Filled       = true
     q.Color        = color or Color3.new(1,1,1)
-    q.Transparency = 0       -- Drawing: 0 = opaque, 1 = invisible
-    q.ZIndex       = 3       -- di bawah box line
+    q.Transparency = 1
+    q.ZIndex       = 3
     return q
 end
 
@@ -72,24 +76,15 @@ end
 -- ═══════════════════════════════════════════════
 local function CreateESP(color)
     return {
-        -- Fill (tô kín, dưới box)
         BoxFill  = NewQuad(color),
-
-        -- Box lines (trên fill)
         BoxTop   = NewLine(color, Config.BoxThickness),
         BoxBot   = NewLine(color, Config.BoxThickness),
         BoxLeft  = NewLine(color, Config.BoxThickness),
         BoxRight = NewLine(color, Config.BoxThickness),
-
-        -- Text
         Name     = NewText(Config.TextColor, 13),
         Dist     = NewText(Config.TextColor, 11),
-
-        -- HP bar
         HPBg     = NewLine(Color3.new(0,0,0), 4),
         HPFill   = NewLine(Color3.fromRGB(80,220,80), 3),
-
-        -- Tracer
         Tracer   = NewLine(Config.TracerColor, Config.TracerThickness),
     }
 end
@@ -103,7 +98,7 @@ local function HideESP(esp)
 end
 
 -- ═══════════════════════════════════════════════
---  CACHE NPC (update tiap 3 detik)
+--  CACHE NPC
 -- ═══════════════════════════════════════════════
 local espObjects = {}
 local npcList    = {}
@@ -145,20 +140,16 @@ local function GetBounds(char)
     local height = (botScreen.Y - topScreen.Y) * Config.BoxScale
     local width  = math.abs(height) * 0.5
     local centerY= (topScreen.Y + botScreen.Y) / 2
-
     local newTop = centerY - height / 2
     local newBot = centerY + height / 2
 
     return {
-        topY   = newTop,
-        botY   = newBot,
-        midX   = midX,
-        height = height,
-        width  = width,
-        tl     = Vector2.new(midX - width/2, newTop),
-        tr     = Vector2.new(midX + width/2, newTop),
-        bl     = Vector2.new(midX - width/2, newBot),
-        br     = Vector2.new(midX + width/2, newBot),
+        topY = newTop, botY = newBot,
+        midX = midX,   height = height, width = width,
+        tl = Vector2.new(midX - width/2, newTop),
+        tr = Vector2.new(midX + width/2, newTop),
+        bl = Vector2.new(midX - width/2, newBot),
+        br = Vector2.new(midX + width/2, newBot),
         center = Vector2.new(midX, centerY),
     }
 end
@@ -180,7 +171,7 @@ local function UpdateESP(esp, char, color, label)
 
     local showBox = Config.ESPEnabled and Config.BoxEnabled
 
-    -- ── Fill tô kín ───────────────────────────
+    -- Fill
     esp.BoxFill.Visible = showBox and Config.BoxFillOpacity > 0
     if showBox and Config.BoxFillOpacity > 0 then
         esp.BoxFill.PointA     = b.tl
@@ -188,12 +179,10 @@ local function UpdateESP(esp, char, color, label)
         esp.BoxFill.PointC     = b.br
         esp.BoxFill.PointD     = b.bl
         esp.BoxFill.Color      = color
-        -- Drawing Transparency: 0=opaque, 1=invisible
-        -- Config.BoxFillOpacity: 0=tidak ada, 1=penuh
         esp.BoxFill.Transparency = 1 - Config.BoxFillOpacity
     end
 
-    -- ── Box lines ─────────────────────────────
+    -- Box lines
     esp.BoxTop.Visible   = showBox
     esp.BoxBot.Visible   = showBox
     esp.BoxLeft.Visible  = showBox
@@ -205,7 +194,7 @@ local function UpdateESP(esp, char, color, label)
         esp.BoxRight.From  = b.tr; esp.BoxRight.To  = b.br; esp.BoxRight.Color  = color
     end
 
-    -- ── Name ──────────────────────────────────
+    -- Name
     local showName = Config.ESPEnabled and Config.NameEnabled
     esp.Name.Visible = showName
     if showName then
@@ -215,7 +204,7 @@ local function UpdateESP(esp, char, color, label)
         esp.Name.Center   = true
     end
 
-    -- ── Distance ──────────────────────────────
+    -- Distance
     local showDist = Config.ESPEnabled and Config.DistEnabled
     esp.Dist.Visible = showDist
     if showDist then
@@ -226,7 +215,7 @@ local function UpdateESP(esp, char, color, label)
         esp.Dist.Size     = math.clamp(11 - dist/150, 7, 11)
     end
 
-    -- ── Health Bar ────────────────────────────
+    -- HP Bar
     local showHP = Config.ESPEnabled and Config.HealthEnabled
     esp.HPBg.Visible   = showHP
     esp.HPFill.Visible = showHP
@@ -239,11 +228,11 @@ local function UpdateESP(esp, char, color, label)
         esp.HPFill.From  = Vector2.new(barX, b.botY - b.height * hpRatio)
         esp.HPFill.To    = Vector2.new(barX, b.botY)
         local r = math.clamp(2*(1-hpRatio), 0, 1)
-        local g = math.clamp(2*hpRatio,     0, 1)
+        local g = math.clamp(2*hpRatio, 0, 1)
         esp.HPFill.Color = Color3.new(r, g, 0)
     end
 
-    -- ── Tracer ────────────────────────────────
+    -- Tracer
     local showTracer = Config.ESPEnabled and Config.TracerEnabled
     esp.Tracer.Visible = showTracer
     if showTracer then
@@ -265,22 +254,33 @@ RunService.RenderStepped:Connect(function()
 
     local seen = {}
 
+    -- ✅ Players (chỉ chạy nếu PlayerESP bật)
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         local char = player.Character
         if not char then continue end
         seen[char] = true
-        if not espObjects[char] then espObjects[char] = CreateESP(Config.PlayerColor) end
-        UpdateESP(espObjects[char], char, Config.PlayerColor, player.DisplayName)
+        if Config.PlayerESP then
+            if not espObjects[char] then espObjects[char] = CreateESP(Config.PlayerColor) end
+            UpdateESP(espObjects[char], char, Config.PlayerColor, player.DisplayName)
+        else
+            if espObjects[char] then HideESP(espObjects[char]) end
+        end
     end
 
+    -- ✅ NPCs (chỉ chạy nếu NPCESP bật)
     for _, char in ipairs(npcList) do
         if not char or not char.Parent then continue end
         seen[char] = true
-        if not espObjects[char] then espObjects[char] = CreateESP(Config.NPCColor) end
-        UpdateESP(espObjects[char], char, Config.NPCColor, char.Name)
+        if Config.NPCESP then
+            if not espObjects[char] then espObjects[char] = CreateESP(Config.NPCColor) end
+            UpdateESP(espObjects[char], char, Config.NPCColor, char.Name)
+        else
+            if espObjects[char] then HideESP(espObjects[char]) end
+        end
     end
 
+    -- Cleanup
     for char, esp in pairs(espObjects) do
         if not seen[char] then
             RemoveESP(esp)
@@ -303,6 +303,15 @@ VisualTab:AddSection("ESP Settings")
 VisualTab:AddToggle("Bật ESP", false, function(v)
     Config.ESPEnabled = v
     if not v then for _, esp in pairs(espObjects) do HideESP(esp) end end
+end)
+
+-- ✅ Bật/tắt Player và NPC riêng
+VisualTab:AddToggle("Enable Player ESP", true, function(v)
+    Config.PlayerESP = v
+end)
+
+VisualTab:AddToggle("Enable NPC ESP", true, function(v)
+    Config.NPCESP = v
 end)
 
 VisualTab:AddSection("Loại ESP")
@@ -362,7 +371,6 @@ VisualTab:AddSlider("Độ dày viền Box", 1, 5, 2, function(v)
     end
 end)
 
--- ✅ Slider tô kín box: 0 = không tô, 10 = tô hoàn toàn
 VisualTab:AddSlider("Độ tô kín Box (0-10)", 0, 10, 0, function(v)
     Config.BoxFillOpacity = v / 10
 end)
