@@ -3,7 +3,8 @@
     Đảm bảo bạn đã cài đặt môi trường thực thi hỗ trợ Rayfield.
 ]]
 local CamHub = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main/menu.lua"
+    "https://raw.githubusercontent.com/taminhkhang2k10/Cam-Hub/main//x10000000000000luck.lua
+"
 ))()
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
